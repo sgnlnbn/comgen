@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>File Comparison and Random Sampling</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #333;
+      color: #fff;
+      padding: 20px;
+      margin: 0;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    .container {
+      margin: 0 auto;
+      max-width: 800px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .form-container, .sampling-container {
+      flex: 0 0 48%;
+      background-color: #444;
+      padding: 20px;
+      border-radius: 5px;
+    }
+    .form-container {
+      border-right: 2px solid #666;
+    }
+    input[type="file"], textarea, input[type="number"], button {
+      display: block;
+      margin: 10px auto;
+      background-color: #d1d1d1;
+      color: #000000;
+      border: none;
+      padding: 8px;
+      border-radius: 5px;
+    }
+    button:hover {
+      background-color: #888;
+      cursor: pointer;
+    }
+    .result-box, #differences {
+      background-color: #444;
+      color: #fff;
+      padding: 10px;
+      margin-top: 20px;
+      border-radius: 5px;
+      font-size: 0.9em;
+    }
+    footer {
+      text-align: center;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #fff;
+    }
+    footer p {
+      margin: 5px 0;
+      color: #fff;
+    }
+    footer a {
+      color: #FFD700;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>File Comparison and Random Sampling</h1>
+  <div class="container">
+    <div class="form-container">
+      <h2>File Comparison</h2>
+      <form id="uploadForm">
+        <input type="file" id="file1" accept=".xlsx,.xls">
+        <input type="file" id="file2" accept=".xlsx,.xls">
+        <button type="button" onclick="confirmUpload()">Compare Now</button>
+      </form>
+      <div class="result-box" id="resultBox" style="display: none;">
+        <h2>Differences found:</h2>
+        <ul id="differences"></ul>
+      </div>
+    </div>
+
+    <div class="sampling-container">
+      <h2>Random Sampling</h2>
+      <textarea id="idList" placeholder="Paste IDs here (one per line)" style="width: 80%; height: 100px;"></textarea>
+      <input type="number" id="samplePercentage" placeholder="Enter percentage (e.g., 10)">
+      <button type="button" onclick="performSampling()">Generate</button>
+      <p id="sampleResult" style="margin-top: 10px;"></p>
+    </div>
+  </div>
+
+  <script>
+    function confirmUpload() {
+      const file1 = document.getElementById('file1').files[0];
+      const file2 = document.getElementById('file2').files[0];
+
+      if (!file1 || !file2) {
+        alert('Please upload both Excel files.');
+        return;
+      }
+
+      const confirmMsg = confirm('Have you uploaded both files correctly?');
+      if (confirmMsg) {
+        compareExcelFiles(file1, file2);
+      }
+    }
+
+    function compareExcelFiles(file1, file2) {
+      const reader1 = new FileReader();
+      const reader2 = new FileReader();
+
+      reader1.onload = function(e) {
+        const data1 = new Uint8Array(e.target.result);
+        const workbook1 = XLSX.read(data1, { type: 'array' });
+
+        reader2.onload = function(e) {
+          const data2 = new Uint8Array(e.target.result);
+          const workbook2 = XLSX.read(data2, { type: 'array' });
+
+          const differences = [];
+
+          const sheetNames1 = workbook1.SheetNames;
+          const sheetNames2 = workbook2.SheetNames;
+
+          sheetNames1.forEach(sheetName => {
+            if (sheetNames2.includes(sheetName)) {
+              const sheet1 = workbook1.Sheets[sheetName];
+              const sheet2 = workbook2.Sheets[sheetName];
+
+              const range = XLSX.utils.decode_range(sheet1['!ref']);
+
+              for (let rowNum = range.s.r; rowNum <= range.e.r; rowNum++) {
+                for (let colNum = range.s.c; colNum <= range.e.c; colNum++) {
+                  const cell1 = sheet1[XLSX.utils.encode_cell({ r: rowNum, c: colNum })];
+                  const cell2 = sheet2[XLSX.utils.encode_cell({ r: rowNum, c: colNum })];
+
+                  if (cell1 && cell2 && cell1.v !== cell2.v) {
+                    const columnName = XLSX.utils.encode_col(colNum);
+                    const cellAddress = columnName + (rowNum + 1);
+                    differences.push(`Sheet: ${sheetName}, Cell ${cellAddress}: ${cell1.v} (File 1) vs ${cell2.v} (File 2)`);
+                  }
+                }
+              }
+            } else {
+              differences.push(`Sheet: ${sheetName} is present in File 1 but not in File 2`);
+            }
+          });
+
+          sheetNames2.forEach(sheetName => {
+            if (!sheetNames1.includes(sheetName)) {
+              differences.push(`Sheet: ${sheetName} is present in File 2 but not in File 1`);
+            }
+          });
+
+          displayDifferences(differences);
+        };
+
+        reader2.readAsArrayBuffer(file2);
+      };
+
+      reader1.readAsArrayBuffer(file1);
+    }
+
+    function displayDifferences(differences) {
+      const resultBox = document.getElementById('resultBox');
+      const differencesList = document.getElementById('differences');
+
+      if (differences.length > 0) {
+        differencesList.innerHTML = differences.map(diff => `<li>${diff}</li>`).join('');
+        resultBox.style.display = 'block';
+      } else {
+        differencesList.innerHTML = '<li>No differences found.</li>';
+        resultBox.style.display = 'block';
+      }
+    }
+
+    function performSampling() {
+      const idList = document.getElementById('idList').value.split('\n').filter(Boolean);
+      const samplePercentage = parseFloat(document.getElementById('samplePercentage').value);
+
+      if (isNaN(samplePercentage) || samplePercentage <= 0 || samplePercentage > 100) {
+        alert('Please enter a valid percentage (1-100).');
+        return;
+      }
+
+      let sampleSize = Math.round((samplePercentage / 100) * idList.length);
+
+      if (sampleSize < 1) {
+        sampleSize = 1;
+      }
+
+      const shuffledIDs = idList.sort(() => Math.random() - 0.5);
+      const sampledIDs = shuffledIDs.slice(0, sampleSize);
+
+      document.getElementById('sampleResult').innerText = `Randomized Sample (${sampleSize} Cases):\n${sampledIDs.join('\n')}`;
+    }
+  </script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.4/xlsx.full.min.js"></script>
+
+  <footer>
+    <p>Feedback: <a href="mailto:shanqin@netlinknbn.com">shanqin@netlinknbn.com</a></p>
+  </footer>
+</body>
+</html>
